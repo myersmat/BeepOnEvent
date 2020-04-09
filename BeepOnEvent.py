@@ -1,12 +1,20 @@
 import json
-import re
 
 from ..Script import Script
 from UM.Logger import Logger
 
+
 class BeepOnEvent(Script):
+    # TODO: Add print_complete support
     def __init__(self):
+        self.event_gcode_dict = {
+            'bed_finished_heating': 'M190',
+            'tool_finished_heating': 'M109',
+            'pause': 'M226',
+            'print_complete':';End of Gcode'
+        }        
         super().__init__()
+
         
     
     def getSettingDataString(self):
@@ -23,7 +31,8 @@ class BeepOnEvent(Script):
                     "description": "Event type to beep on.",
                     "type": "enum",
                     "options": {"bed_finished_heating": "Bed Finished Heating",
-                                "nozzle_finished_heating": "Nozzle Finished Heating",
+                                "tool_finished_heating": "Tool Finished Heating",
+                                "pause": "Pause",
                                 "print_complete": "Print Complete"},
                     "default_value": "bed_finished_heating"
                 },
@@ -58,22 +67,36 @@ class BeepOnEvent(Script):
         }"""
                 
     def execute(self, data):
-        with open('C:/Users/mattm/xtest.txt', 'w') as f:
-            f.write(str(type(data)))
-            f.write('\n')
-            f.write(str(tdata[0]))
-            f.write('\n')
-            f.write(str(tdata[1]))
-            f.write('\n')
-            f.write(str(tdata[2]))
-            f.write('\n')
-            f.write(str(tdata[3]))
-            f.write('\n')
-            f.write(str(tdata[4]))
-            f.write('\n')
-            f.write(str(tdata[5]))
-            f.write('\n')
-            f.write(str(tdata[6]))
-            f.write('\n')
-            f.write(str(tdata[7]))
+        event = self.getSettingValueByKey("beep_on")
+        f = self.getSettingValueByKey("beep_frequency")
+        duration = self.getSettingValueByKey("beep_duration")
+        do_pause = self.getSettingValueByKey("pause_after_beep")
+        target_gcode = "M300 S" + str(f) + " P"  + str(duration)
+        search_gcode = self.event_gcode_dict[event]
+        if do_pause:
+            target_gcode += "\n" + self.event_gcode_dict['pause']
+        for layer_idx, layer in enumerate(data):
+            lines = layer.split('\n')
+            line_inc = 0 if event == 'print_complete' else 1
+            for line_idx, line in enumerate(lines[:]):
+                if event != 'print_complete':
+                    if len(line) > 0 and line[0] != ';' and search_gcode in line:
+                        lines.insert(line_idx + line_inc, target_gcode)
+                        line_inc += 1
+                else:
+                    if search_gcode in line:
+                        lines.insert(line_idx + line_inc, target_gcode)
+                        line_inc += 1
+
+            data[layer_idx] = '\n'.join(lines)
+        return data
+
+                    
+
+
+                        
+                        
+
+
+
         
